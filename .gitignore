@@ -62,4 +62,4 @@ htmlcov/
 .mypy_cache/
 
 # Via listener capture (mitm addon)
-via_validate_calls.json
+investigation/via_validate_calls.json
