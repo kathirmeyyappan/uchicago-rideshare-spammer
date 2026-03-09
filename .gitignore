@@ -63,6 +63,7 @@ htmlcov/
 
 # Via listener capture (mitm addon)
 investigation/via_validate_calls.json
+investigation/latest_auth.json
 
 # Attack response dumps
 attack/response_*.json
