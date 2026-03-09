@@ -3,6 +3,7 @@ Via listener: mitmproxy addon that logs every request to Via's recurring `valida
 
 Writes:
 - via_validate_calls.json: JSON array of all validate requests (pretty-printed)
+- latest_auth.json: latest auth token and related fields from the most recent request (for refreshing .env when token expires)
 
 Usage:
   mitmdump -s via_listener.py
@@ -20,6 +21,7 @@ from mitmproxy import http, ctx
 
 TARGET_URL = "https://router-ucaca.live.ridewithvia.com/ops/rider/proposal/prescheduled/recurring/validate"
 CALLS_LOG = Path("via_validate_calls.json")
+LATEST_AUTH_LOG = Path("latest_auth.json")
 
 
 def _load_calls() -> list:
@@ -65,5 +67,25 @@ def request(flow: http.HTTPFlow) -> None:
             json.dumps(calls, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        # Record latest auth so you can refresh .env when the token expires
+        auth_token = payload.get("headers", {}).get("authorization") or (
+            payload.get("body") or {}
+        ).get("whos_asking", {}).get("auth_token")
+        if auth_token:
+            body = payload.get("body") or {}
+            whos = body.get("whos_asking") or {}
+            client = body.get("client_details", {}).get("client_spec") or {}
+            latest = {
+                "auth_token": auth_token,
+                "rider_id": whos.get("id"),
+                "rbzid": payload.get("headers", {}).get("rbzid"),
+                "cookie": payload.get("headers", {}).get("cookie"),
+                "device_id": client.get("device_id"),
+                "updated_at": payload.get("timestamp_utc"),
+            }
+            LATEST_AUTH_LOG.write_text(
+                json.dumps(latest, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
     except Exception as e:
         ctx.log.warn(f"Could not write {CALLS_LOG}: {e}")
