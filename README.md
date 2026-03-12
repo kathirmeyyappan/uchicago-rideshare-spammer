@@ -8,7 +8,7 @@
 
 Reverse-engineering UChicago’s **RideSmart** app (Via) to understand its API: which endpoints drive route assignment and the free-Lyft fallback, and whether I could generate synthetic traffic to stress the routing engine.
 
-## Why I gave up
+## Why I gave up (for now)
 
 The API is wide open (no WAF, no rate limiting, trivially replayable with an auth token). But **flooding `/validate` does not reliably trigger the Lyft fallback**. That endpoint is likely **stateless** (read-only feasibility check) and doesn’t inject demand into Via’s route planner. The Lyft voucher is probably gated by real `/book`-level demand or fleet availability, not `/validate` traffic. Without spamming `/book` (which creates real ride records and has unknown side effects), the “free Lyft via API flooding” idea is **not proven** — so the project is abandoned.
 
