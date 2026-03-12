@@ -1,6 +1,6 @@
 # uchicago-rideshare-spammer
 
-**→ Full write-up, findings, and rationale: [Via RideSmart API Spamming — Findings & Implementation [ABANDONED]](https://www.notion.so/723eea1ebed842ccb255621bffe1d186)** — that’s the place to see the full picture.
+**→ Full write-up, findings, and rationale: [Via RideSmart API Spamming — Findings & Implementation](https://www.notion.so/723eea1ebed842ccb255621bffe1d186)** — that’s the place to see the full picture.
 
 ---
 
