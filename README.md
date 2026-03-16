@@ -19,14 +19,14 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-You will also need to wire up your phone so that network traffic can be recorded by scripts running on your machine. See instructions for that here: [placeholder].
+You will also need to wire up your phone so that network traffic can be recorded by scripts running on your machine. See instructions for that here: https://info.kathirm.com/ridshare-spammer-setup.
 
 ---
 
 ## Instructions (run from repo root)
 
 1. **Point your phone at this computer.**  
-   Follow [these instructions](placeholder link) to send your phone’s network traffic through the machine running the scripts.
+   Follow [these instructions](https://info.kathirm.com/ridshare-spammer-setup) to send your phone’s network traffic through the machine running the scripts.
 
 2. **Capture credentials.**  
    Run `./investigate.sh`. Book a ride in the RideSmart app. The listener writes **`via_credentials.json`** in the repo root (overwritten on each validate request).
