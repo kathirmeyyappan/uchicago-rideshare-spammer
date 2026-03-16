@@ -1,5 +1,3 @@
 # Investigation
 
-Run the shell script to capture the validate endpoint (the one we're investigating). See **`via_listener.py`** and **`listen.sh`** for usage and overview.
-
-You should be able to just run `./listen.sh`, book a lyft, and then see `via_validate_calls.json` for payloads to the route request endpoint, and `latest_auth.json` for your specific auth token (to input for the attack scripts in `../attack`).
+Run **`./investigate.sh`** from the repo root. Set your phone to use this computer as its proxy (see instructions [here]), then book a ride in the app like you normally would. When you’re done, the info and creds the attack script needs is saved — you should be able to run **`./attack.sh`** from the root to spoof.
