@@ -2,11 +2,11 @@
 
 Tool that spoofs UChicago RideSmart requests in high volume to try to get free lyfts (see instructions below).
 
-I tried reverse-engineering UChicago’s **RideSmart** app (Via) to understand its API: which endpoints drive route assignment and the free-Lyft fallback, and is it possible to generate synthetic traffic to stress the routing engine to get free Lyft rides?
+I tried reverse-engineering UChicago’s **RideSmart** app (Via) to understand its API: which endpoints drive route assignment and the free-Lyft fallback, and is it possible to generate synthetic traffic to stress the routing engine to get free Lyft rides? Some findings can be found here: https://info.kathirm.com/rideshare-spammer-findings.
 
 ## Disclaimer
 
-The API is wide open (no WAF, no rate limiting, trivially replayable with an auth token). But **flooding `/validate` does not seem to reliably trigger the Lyft fallback**. That endpoint is likely **stateless** (read-only feasibility check) and doesn’t inject demand into Via’s route planner. The Lyft voucher could be gated by real `/book`-level demand or fleet availability, rather than `/validate` traffic. Without spamming `/book` (which creates real ride records and has unknown side effects), the “free Lyft via API flooding” idea is **not proven**. That being said, I do seem to get Lyfts at a higher rate when timing the request on my phone properly.
+The API is wide open (no WAF, no rate limiting, trivially replayable with an auth token). But **flooding `/validate` does not seem to reliably trigger the Lyft fallback**. That endpoint is likely **stateless** (read-only feasibility check) and doesn’t inject demand into Via’s route planner. The Lyft voucher could be gated by real `/book`-level demand or fleet availability, rather than `/validate` traffic. Without spamming `/book` (which creates real ride records and has unknown side effects), the “free Lyft via API flooding” idea is **not proven**. That being said, I do seem to get Lyfts at a higher rate when timing the request on my phone against the attack script properly.
 
 ---
 
